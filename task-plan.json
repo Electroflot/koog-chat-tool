@@ -49,7 +49,7 @@
       "agent": "Plan",
       "depends_on": ["T0"],
       "deliverables": ["docs/ARCHITECTURE.md", "docs/PROJECT.md"],
-      "status": "in_progress"
+      "status": "done"
     },
     {
       "id": "T2",
@@ -59,7 +59,7 @@
       "agent": "claude",
       "depends_on": ["T1"],
       "deliverables": ["build.gradle.kts", "settings.gradle.kts", "Application.kt (скелет Ktor)", ".gitignore", "git init"],
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "id": "T3",
