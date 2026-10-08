@@ -1,0 +1,23 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+
+# Kotlin
+out/
+
+# Артефакты выполнения приложения: логи LLM и сохранённые истории чатов
+logs/
+storage/
+
+# Секреты и локальная конфигурация
+.env
+*.env

@@ -1,0 +1,182 @@
+{
+  "project": {
+    "name": "koog-chat-tool",
+    "description": "Инструмент для LLM, сохраняющий историю чата в файл. HTTP-сервис на Ktor; все вызовы LLM выполняются через фреймворк Koog; каждый запрос к LLM и ответ на него логируются в файл.",
+    "stack": ["Kotlin", "Ktor (server, Netty)", "Koog (ai.koog)", "kotlinx-serialization", "Logback"],
+    "jdk": "17+",
+    "repo": { "url": null, "visibility": "private" },
+    "created_at": "2026-10-08"
+  },
+  "decisions": [
+    { "key": "llm_provider", "value": "OpenAI-совместимый API (OpenAI / DeepSeek / OpenRouter; настраивается в конфигурации)", "status": "confirmed" },
+    { "key": "chat_storage_format", "value": "JSON — один файл на диалог", "status": "confirmed" },
+    { "key": "project_name", "value": "koog-chat-tool", "status": "confirmed" },
+    { "key": "log_format", "value": "JSON-строки (JSONL) в logs/llm-requests.log, ротация через Logback", "status": "proposed" },
+    { "key": "storage_path", "value": "storage/chats/ (настраивается в конфигурации)", "status": "proposed" },
+    { "key": "endpoint", "value": "POST /tools/save-chat", "status": "proposed" }
+  ],
+  "agents": [
+    { "name": "claude", "role": "Реализация, скаффолдинг, исправления после ревью, публикация на GitHub" },
+    { "name": "Plan", "role": "Проектирование архитектуры и описание проекта" },
+    { "name": "test-writer", "role": "Написание и запуск тестов" },
+    { "name": "code-reviewer", "role": "Ревью кода: корректность, безопасность, поддерживаемость" },
+    { "name": "qa", "role": "Верификация: сборка, тесты, запуск реального приложения, проверка требований, эксплораторное тестирование" },
+    { "name": "docs-writer", "role": "Документация проекта (README, API, логирование)" }
+  ],
+  "phases": [
+    { "id": 0, "name": "Подготовка" },
+    { "id": 1, "name": "Проектирование" },
+    { "id": 2, "name": "Реализация" },
+    { "id": 3, "name": "Верификация" },
+    { "id": 4, "name": "Документация и публикация" }
+  ],
+  "tasks": [
+    {
+      "id": "T0",
+      "phase": 0,
+      "title": "План задач и согласование",
+      "description": "Составить план задач, распределить их между агентами, зафиксировать ключевые решения.",
+      "agent": "claude",
+      "depends_on": [],
+      "deliverables": ["task-plan.json"],
+      "status": "done"
+    },
+    {
+      "id": "T1",
+      "phase": 1,
+      "title": "Архитектура и описание проекта",
+      "description": "Спроектировать архитектуру ДО написания кода: модули и пакеты, схема данных (ChatMessage / ChatHistory), API-эндпоинты Ktor, JSON-схема инструмента для LLM, поток логирования запросов/ответов, обработка ошибок, конкурентный доступ к файлам. Подготовить описание проекта: цели, стек, ограничения, Definition of Done.",
+      "agent": "Plan",
+      "depends_on": ["T0"],
+      "deliverables": ["docs/ARCHITECTURE.md", "docs/PROJECT.md"],
+      "status": "in_progress"
+    },
+    {
+      "id": "T2",
+      "phase": 2,
+      "title": "Скаффолдинг проекта",
+      "description": "Gradle-проект Kotlin/JVM (JDK 17+). Зависимости: Ktor server (Netty), Koog (ai.koog:koog-agents, koog-ktor plugin), kotlinx-serialization, Logback. Инициализировать git, добавить .gitignore. Весь код с комментариями, поясняющими происходящее.",
+      "agent": "claude",
+      "depends_on": ["T1"],
+      "deliverables": ["build.gradle.kts", "settings.gradle.kts", "Application.kt (скелет Ktor)", ".gitignore", "git init"],
+      "status": "pending"
+    },
+    {
+      "id": "T3",
+      "phase": 2,
+      "title": "Модель данных и хранилище истории чата",
+      "description": "Сериализуемые модели диалога (ChatMessage, ChatHistory). Сервис ChatHistoryStorage: запись одного JSON-файла на диалог (имя из id/таймстампа), атомарная запись, создание каталога, обработка ошибок ввода-вывода. Код с комментариями.",
+      "agent": "claude",
+      "depends_on": ["T2"],
+      "deliverables": ["model/ChatMessage.kt", "model/ChatHistory.kt", "storage/ChatHistoryStorage.kt"],
+      "status": "pending"
+    },
+    {
+      "id": "T4",
+      "phase": 2,
+      "title": "Инструмент save-chat и маршрут Ktor",
+      "description": "POST /tools/save-chat: приём истории чата, валидация, вызов хранилища, ответ со статусом и путём к файлу. JSON-схема инструмента (tool schema), которую LLM сможет использовать через function/tool calling. Комментарии к коду.",
+      "agent": "claude",
+      "depends_on": ["T3"],
+      "deliverables": ["routes/ChatToolsRoutes.kt", "tool/ToolSchema.kt"],
+      "status": "pending"
+    },
+    {
+      "id": "T5",
+      "phase": 2,
+      "title": "Интеграция Koog",
+      "description": "Обёртка LlmGateway над Koog: SingleLLMPromptExecutor с OpenAI-совместимым провайдером; base URL, API-ключ и модель берутся из конфигурации. ВСЕ вызовы LLM в проекте идут только через этот шлюз. Комментарии к коду.",
+      "agent": "claude",
+      "depends_on": ["T2"],
+      "deliverables": ["llm/LlmGateway.kt", "config/KoogConfig.kt"],
+      "status": "pending"
+    },
+    {
+      "id": "T6",
+      "phase": 2,
+      "title": "Логирование запросов и ответов LLM",
+      "description": "ОБЯЗАТЕЛЬНЫЙ перехват каждого вызова LLM: запрос (payload, модель, время), ответ (payload, токены, длительность), ошибки. Запись JSON-строками в logs/llm-requests.log; маскирование секретов; ротация через Logback. Комментарии к коду.",
+      "agent": "claude",
+      "depends_on": ["T4", "T5"],
+      "deliverables": ["llm/LlmLoggingInterceptor.kt", "resources/logback.xml"],
+      "status": "pending"
+    },
+    {
+      "id": "T7",
+      "phase": 3,
+      "title": "Тесты",
+      "description": "Юнит-тесты хранилища, валидации и логирования; интеграционные тесты через Ktor testApplication с моком Koog. Проверить: файл истории создаётся, лог запросов/ответов пишется, ошибки обрабатываются.",
+      "agent": "test-writer",
+      "depends_on": ["T4", "T5", "T6"],
+      "deliverables": ["unit + integration тесты"],
+      "status": "pending"
+    },
+    {
+      "id": "T8",
+      "phase": 3,
+      "title": "Код-ревью",
+      "description": "Проверка корректности, обработки ошибок, конкурентности, безопасности (API-ключи, пути к файлам, path traversal), читаемости и качества комментариев.",
+      "agent": "code-reviewer",
+      "depends_on": ["T4", "T5", "T6", "T7"],
+      "deliverables": ["отчёт ревью"],
+      "status": "pending"
+    },
+    {
+      "id": "T9",
+      "phase": 3,
+      "title": "Исправления по итогам ревью",
+      "description": "Устранить замечания код-ревью, если они есть. Пропускается, если замечаний нет.",
+      "agent": "claude",
+      "depends_on": ["T8"],
+      "deliverables": [],
+      "status": "pending",
+      "optional": true
+    },
+    {
+      "id": "T10",
+      "phase": 3,
+      "title": "QA-верификация",
+      "description": "Сборка, полный прогон тестов, линтер/type-check. Запуск реального приложения. Проверка соответствия требованиям: вызовы LLM через Koog, маршрутизация через Ktor, логирование в файл, сохранение истории в JSON. Эксплораторное тестирование регрессий и краевых случаев.",
+      "agent": "qa",
+      "depends_on": ["T8", "T9"],
+      "deliverables": ["отчёт QA"],
+      "status": "pending"
+    },
+    {
+      "id": "T11",
+      "phase": 4,
+      "title": "Документация",
+      "description": "README: назначение, архитектура (ссылка на docs/ARCHITECTURE.md), инструкция по запуску, конфигурация (провайдер, пути), API инструмента, форматы логов и файлов истории.",
+      "agent": "docs-writer",
+      "depends_on": ["T9"],
+      "deliverables": ["README.md"],
+      "status": "pending"
+    },
+    {
+      "id": "T12",
+      "phase": 4,
+      "title": "Публикация на GitHub",
+      "description": "Создать PRIVATE репозиторий koog-chat-tool на GitHub, закоммитить и запушить проект в ветку main, добавить GitHub Actions CI (сборка + тесты), оформить описание репозитория.",
+      "agent": "claude",
+      "depends_on": ["T10", "T11"],
+      "deliverables": ["private репозиторий koog-chat-tool на GitHub", ".github/workflows/ci.yml"],
+      "status": "pending"
+    }
+  ],
+  "sequence": "T0 → T1 → T2 → [T3 ‖ T5] → T4 → T6 → T7 → T8 → T9 → [T10 ‖ T11] → T12",
+  "definition_of_done": [
+    "Все вызовы LLM выполняются через фреймворк Koog",
+    "Маршрутизация HTTP обрабатывается Ktor",
+    "Каждый запрос к LLM и ответ на него логируется в файл (обязательное требование)",
+    "История чата сохраняется в JSON — один файл на диалог",
+    "Код содержит комментарии, поясняющие происходящее",
+    "Тесты проходят, код-ревью и QA-верификация пройдены",
+    "Проект загружен на GitHub"
+  ],
+  "open_questions": [],
+  "resolved": [
+    { "key": "github_actions_ci", "value": "Да: сборка + тесты на push и PR", "resolved_at": "2026-10-08" },
+    { "key": "repo_visibility", "value": "private", "resolved_at": "2026-10-08" },
+    { "key": "endpoint_auth", "value": "Нет (по умолчанию без авторизации; добавить при необходимости)", "resolved_at": "2026-10-08" }
+  ]
+}
