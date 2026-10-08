@@ -59,7 +59,7 @@
       "agent": "claude",
       "depends_on": ["T1"],
       "deliverables": ["build.gradle.kts", "settings.gradle.kts", "Application.kt (скелет Ktor)", ".gitignore", "git init"],
-      "status": "in_progress"
+      "status": "done"
     },
     {
       "id": "T3",
@@ -69,7 +69,7 @@
       "agent": "claude",
       "depends_on": ["T2"],
       "deliverables": ["model/ChatMessage.kt", "model/ChatHistory.kt", "storage/ChatHistoryStorage.kt"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "T4",
@@ -79,7 +79,7 @@
       "agent": "claude",
       "depends_on": ["T3"],
       "deliverables": ["routes/ChatToolsRoutes.kt", "tool/ToolSchema.kt"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "T5",
@@ -89,7 +89,7 @@
       "agent": "claude",
       "depends_on": ["T2"],
       "deliverables": ["llm/LlmGateway.kt", "config/KoogConfig.kt"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "T6",
@@ -99,7 +99,7 @@
       "agent": "claude",
       "depends_on": ["T4", "T5"],
       "deliverables": ["llm/LlmLoggingInterceptor.kt", "resources/logback.xml"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "T7",
@@ -109,7 +109,7 @@
       "agent": "test-writer",
       "depends_on": ["T4", "T5", "T6"],
       "deliverables": ["unit + integration тесты"],
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "id": "T8",

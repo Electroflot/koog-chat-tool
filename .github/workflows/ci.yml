@@ -1,0 +1,50 @@
+# CI koog-chat-tool: сборка и тесты (репозиторий private).
+# Описание дизайна — docs/ARCHITECTURE.md, раздел 13.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}   # ручной запуск из интерфейса GitHub
+
+# Минимальные права джобы: только чтение содержимого репозитория.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Сборка и тесты (JDK 17)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # Проверка целостности Gradle wrapper (защита от подмены скриптов сборки).
+      - uses: gradle/actions/wrapper-validation@v4
+
+      - name: Настройка JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # Gradle с кэшированием зависимостей и build-cache (ключ — по хэшу gradle-файлов).
+      - name: Настройка Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Сборка + тесты. Реальные вызовы LLM в тестах НЕ выполняются
+      # (Koog подменяется фейком) — секреты в CI не нужны.
+      - name: Сборка и тесты
+        run: ./gradlew build test --no-daemon --stacktrace
+
+      # При падении сохраняем отчёты тестов для разбора.
+      - name: Отчёты тестов (при падении)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: build/reports/tests/**
+          retention-days: 7

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Настройка логирования koog-chat-tool.
+
+  Два потока логов:
+  1) STDOUT — общий лог приложения (события сервера, ошибки) — в консоль;
+  2) LLM-REQUESTS — ОБЯЗАТЕЛЬНЫЙ журнал запросов/ответов LLM — в файл
+     logs/llm-requests.log (JSONL, ротация по размеру и дате). К этому
+     appender'у привязан только логгер "llm.requests" (см. LlmLoggingGateway).
+
+  Каталог logs/ фиксирован и добавлен в .gitignore — логи не попадают в репозиторий.
+-->
+<configuration>
+    <!-- Общий лог приложения в консоль. -->
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Журнал LLM-вызовов: JSONL-файл с ротацией (10MB на файл, 30 дней, до 1GB суммарно). -->
+    <appender name="LLM-REQUESTS" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/llm-requests.log</file>
+        <!-- Немедленный сброс на диск: журнал должен переживать падение процесса. -->
+        <immediateFlush>true</immediateFlush>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/llm-requests.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>10MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>1GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <!-- Сообщение — уже готовый JSON-объект (см. llm/LlmLog.kt), без лишнего паттерна. -->
+            <pattern>%msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Логгер "llm.requests": пишет ТОЛЬКО в файл журнала, не дублирует в консоль. -->
+    <logger name="llm.requests" level="INFO" additivity="false">
+        <appender-ref ref="LLM-REQUESTS"/>
+    </logger>
+
+    <root level="INFO">
+        <appender-ref ref="STDOUT"/>
+    </root>
+</configuration>
