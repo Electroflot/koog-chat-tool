@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Настройка логирования для ТЕСТОВ (logback на тестовом classpath берёт этот файл
+  вместо основного src/main/resources/logback.xml).
+
+  Отличия от продакшен-конфигурации — только каталог журнала LLM-вызовов:
+  здесь это build/test-logs (в рабочем дереве, чистится тестами), а не logs/.
+  Структура appender'ов и логгера "llm.requests" идентична продакшену, чтобы
+  интеграционные тесты проверяли тот же контракт JSONL-журнала.
+-->
+<configuration>
+    <!-- Каталог журнала LLM-вызовов в тестах: build/test-logs/llm-requests.log.
+         Тесты читают этот файл и чистят его в @BeforeAll/@BeforeEach. -->
+    <property name="LLM_LOG_DIR" value="build/test-logs"/>
+
+    <!-- Общий лог приложения в консоль (как в продакшене). -->
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Журнал LLM-вызовов: JSONL-файл (в продакшене — RollingFileAppender с ротацией;
+         здесь обычный FileAppender, потому что RollingFileAppender нельзя перезапустить
+         после stop() — его triggering policy не стартует повторно. Формат записей и
+         логгер идентичны продакшену, поэтому контракт JSONL проверяется тот же). -->
+    <appender name="LLM-REQUESTS" class="ch.qos.logback.core.FileAppender">
+        <file>${LLM_LOG_DIR}/llm-requests.log</file>
+        <immediateFlush>true</immediateFlush>
+        <encoder>
+            <pattern>%msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Логгер "llm.requests": пишет ТОЛЬКО в файл журнала, не дублирует в консоль. -->
+    <logger name="llm.requests" level="INFO" additivity="false">
+        <appender-ref ref="LLM-REQUESTS"/>
+    </logger>
+
+    <root level="INFO">
+        <appender-ref ref="STDOUT"/>
+    </root>
+</configuration>

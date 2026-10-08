@@ -15,7 +15,10 @@ import kotlinx.serialization.json.Json
 object LlmLog {
 
     /** Кодек журнала: компактный JSON (одна строка на событие). */
-    private val json = Json { encodeDefaults = false }
+    private val json = Json {
+        encodeDefaults = false
+        explicitNulls = false // null-поля не печатаем: каждая строка содержит только поля своего типа события
+    }
 
     /** Сериализует событие в одну JSON-строку для записи в журнал. */
     fun encode(event: Event): String = json.encodeToString(Event.serializer(), event)

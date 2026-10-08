@@ -46,8 +46,14 @@ fun main() {
  * @param config конфигурация приложения; по умолчанию читается из application.conf
  *               (HOCON) + env-переменные. Тесты передают конфигурацию явно —
  *               с каталогами @TempDir, чтобы не трогать реальные storage/ и logs/.
+ * @param gatewayFactory фабрика шлюза LLM. По умолчанию — реальный Koog-шлюз
+ *               с обязательным логированием ([defaultGateway]). Тесты подменяют
+ *               его фейковым PromptExecutor (реальные вызовы LLM в тестах запрещены).
  */
-fun Application.module(config: AppConfig = AppConfig.fromHocon()) {
+fun Application.module(
+    config: AppConfig = AppConfig.fromHocon(),
+    gatewayFactory: (AppConfig) -> ChatGateway = ::defaultGateway,
+) {
     // 1. Плагины Ktor: JSON-сериализация тел и единый формат ошибок.
     install(ContentNegotiation) {
         json(
@@ -63,17 +69,10 @@ fun Application.module(config: AppConfig = AppConfig.fromHocon()) {
     // 3. Хранилище историй: каталог (storage/chats) создаётся в конструкторе.
     val storage = ChatHistoryStorage(config.storage.dir)
 
-    // 4. Шлюз LLM: Koog (ВСЕ вызовы LLM — только через него), обёрнутый в
-    //    LlmLoggingGateway — обязательное JSONL-логирование запросов/ответов.
-    val gateway: ChatGateway = LlmLoggingGateway(
-        delegate = KoogLlmGateway(
-            executor = KoogClientFactory.createExecutor(config.llm),
-            model = llmModelFrom(config.llm.model),
-        ),
-        provider = config.llm.provider,
-        baseUrl = config.llm.baseUrl,
-        model = config.llm.model,
-    )
+    // 4. Шлюз LLM: по умолчанию Koog (ВСЕ вызовы LLM — только через него), обёрнутый
+    //    в LlmLoggingGateway — обязательное JSONL-логирование запросов/ответов.
+    //    Фабрика позволяет тестам встроить фейк вместо реального Koog.
+    val gateway: ChatGateway = gatewayFactory(config)
 
     // 5. Маршруты Ktor.
     routing {
@@ -86,3 +85,18 @@ fun Application.module(config: AppConfig = AppConfig.fromHocon()) {
         llmRoutes(gateway, config.llm)
     }
 }
+
+/**
+ * Продакшен-шлюз LLM: реальный Koog (KoogLlmGateway) + обязательное логирование
+ * каждого вызова (LlmLoggingGateway). Единственный источник реальных вызовов LLM
+ * в приложении; в тестах вместо него через gatewayFactory подставляется фейк.
+ */
+private fun defaultGateway(config: AppConfig): ChatGateway = LlmLoggingGateway(
+    delegate = KoogLlmGateway(
+        executor = KoogClientFactory.createExecutor(config.llm),
+        model = llmModelFrom(config.llm.model),
+    ),
+    provider = config.llm.provider,
+    baseUrl = config.llm.baseUrl,
+    model = config.llm.model,
+)
