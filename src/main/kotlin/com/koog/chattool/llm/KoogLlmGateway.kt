@@ -2,6 +2,7 @@ package com.koog.chattool.llm
 
 import ai.koog.prompt.dsl.prompt
 import ai.koog.prompt.executor.model.PromptExecutor
+import ai.koog.prompt.llm.LLMCapability
 import ai.koog.prompt.llm.LLModel
 import ai.koog.prompt.llm.LLMProvider
 import ai.koog.prompt.message.Message
@@ -95,8 +96,18 @@ class KoogLlmGateway(
  * Фабрика модели для шлюза: имя модели из конфигурации, провайдер — OpenAI
  * (все OpenAI-совместимые провайдеры в Koog используют LLMProvider.OpenAI,
  * а фактический адрес задаётся baseUrl в OpenAIClientSettings).
+ *
+ * ВАЖНО: capabilities обязателен! Без него OpenAILLMClient.determineParams падает
+ * с «Cannot determine proper LLM params...» ДО любого сетевого вызова
+ * (дефект найден на QA T10). Декларируем оба: Completion (базовый признак
+ * chat-модели — без него «Model ... does not support completion») и
+ * OpenAIEndpoint.Completions (эндпоинт /v1/chat/completions, chatCompletionsPath).
  */
 fun llmModelFrom(modelId: String): LLModel = LLModel(
     provider = LLMProvider.OpenAI,
     id = modelId,
+    capabilities = listOf(
+        LLMCapability.Completion,
+        LLMCapability.OpenAIEndpoint.Completions,
+    ),
 )

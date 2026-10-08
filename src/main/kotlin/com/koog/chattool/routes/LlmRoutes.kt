@@ -35,7 +35,12 @@ fun Route.llmRoutes(
         val request = try {
             json.decodeFromString<LlmChatRequest>(bodyBytes.decodeToString())
         } catch (e: SerializationException) {
-            throw InvalidJsonException("Тело запроса не соответствует схеме: ${e.message}")
+            throw InvalidJsonException("Тело запроса не соответствует схеме: ${e.safeDetail()}")
+        }
+
+        // Пустой список сообщений отклоняем валидацией, а не ошибкой шлюза (QA T10, дефект 4).
+        if (request.messages.isEmpty()) {
+            throw ValidationException("Список сообщений пуст: требуется хотя бы одно сообщение")
         }
 
         // В запросе к LLM допустимы только роли system и user.

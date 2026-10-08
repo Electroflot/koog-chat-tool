@@ -1,5 +1,6 @@
 package com.koog.chattool.llm
 
+import ai.koog.prompt.llm.LLMCapability
 import com.koog.chattool.model.ChatException
 import com.koog.chattool.model.ChatMessage
 import com.koog.chattool.model.ChatRole
@@ -12,6 +13,7 @@ import java.net.SocketTimeoutException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 
 /**
@@ -34,6 +36,17 @@ class KoogLlmGatewayTest {
     private fun request() = ChatRequest(
         messages = listOf(ChatMessage(ChatRole.USER, "привет")),
     )
+
+    @Test
+    fun `модель из конфигурации поддерживает chat-completions`() {
+        // Регрессия дефекта QA T10: LLModel БЕЗ capabilities заставлял
+        // OpenAILLMClient падать до любого сетевого вызова
+        // («Cannot determine proper LLM params...» / «does not support completion»).
+        val model = llmModelFrom("gpt-4.1")
+        assertTrue(model.supports(LLMCapability.Completion))
+        assertTrue(model.supports(LLMCapability.OpenAIEndpoint.Completions))
+        assertTrue(model.supports(LLMCapability.OpenAIEndpoint.Responses).not(), "лишние capabilities не декларируем")
+    }
 
     @Test
     fun `таймаут соединения классифицируется как LLM_TIMEOUT со статусом 504`() = runTest {

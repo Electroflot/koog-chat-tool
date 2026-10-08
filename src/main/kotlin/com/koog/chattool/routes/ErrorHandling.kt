@@ -2,6 +2,7 @@ package com.koog.chattool.routes
 
 import com.koog.chattool.llm.SecretMasker
 import com.koog.chattool.model.AppException
+import com.koog.chattool.model.ChatException
 import com.koog.chattool.model.ErrorBody
 import com.koog.chattool.model.ErrorResponse
 import kotlinx.coroutines.CancellationException
@@ -25,12 +26,17 @@ fun Application.installErrorHandling() {
 
     install(StatusPages) {
         // Ожидаемые ошибки приложения: валидация, хранилище, вызовы LLM.
-        // Сообщение маскируется: в нём может быть URL провайдера или текст с секретами.
         exception<AppException> { call, e ->
             if (e.httpStatus.value >= 500) {
+                // В консольный лог сообщение попадает ТОЛЬКО замаскированным
+                // (в нём может быть URL провайдера с параметрами).
                 log.warn("Ошибка ${e.code}: ${SecretMasker.mask(e.message)}")
             }
-            call.respond(e.httpStatus, ErrorResponse(ErrorBody(e.code, SecretMasker.mask(e.message))))
+            // В HTTP-ответе маскируем только сообщения ошибок LLM — они могут нести
+            // текст провайдера. Сообщения валидации/хранилища генерирует наш код,
+            // и избыточное маскирование деградирует их информативность (QA T10).
+            val message = if (e is ChatException) SecretMasker.mask(e.message) else e.message
+            call.respond(e.httpStatus, ErrorResponse(ErrorBody(e.code, message)))
         }
 
         // Отмену корутины НЕ превращаем в 500: пробрасываем как есть,

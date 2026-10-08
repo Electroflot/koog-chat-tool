@@ -161,14 +161,14 @@ data class ChatHistory(
 
 | HTTP | code | Условие |
 |---|---|---|
-| 400 | INVALID_JSON | тело не парсится |
-| 400 | VALIDATION_FAILED | неверная роль, пустой контент, >500 сообщений, плохой id, title > 500 |
-| 413 | PAYLOAD_TOO_LARGE | тело > 5 МБ или сообщение > 100 000 символов |
+| 400 | INVALID_JSON | тело не парсится или содержит неизвестную роль (enum не десериализуется) |
+| 400 | VALIDATION_FAILED | пустой контент, >500 сообщений, сообщение > 100 000 символов, плохой id, title > 500 |
+| 413 | PAYLOAD_TOO_LARGE | тело > 5 МБ |
 | 500 | STORAGE_ERROR | ошибка ввода-вывода/записи (в т.ч. нет прав на каталог) |
 
 ### 5.2 GET /health
 
-`{"status": "ok", "storage": {"dir": "storage/chats", "writable": true}, "llm": {"configured": true, "provider": "openai-compatible", "model": "gpt-4.1"}}` — `llm.configured` = true, если задан apiKey. API-ключ и полный URL провайдера НЕ раскрываются (имя модели показывается).
+`{"status": "ok", "storage": {"dir": "storage/chats", "writable": true}, "llm": {"configured": true, "provider": "openai-compatible", "model": "gpt-4.1"}}` — `llm.configured` = true, если задан apiKey. API-ключ и полный URL провайдера НЕ раскрываются (имя модели показывается). `storage.dir` возвращается ровно как задан в конфигурации.
 
 ### 5.3 POST /llm/chat (опционально, для верификации и QA)
 
@@ -334,7 +334,7 @@ logback.xml (ротация и разделение потоков):
 - консольный appender для общего лога (pattern, INFO);
 - файловый `RollingFileAppender` «LLM-REQUESTS» привязан ТОЛЬКО к логгеру `llm.requests` (`additivity=false`, `immediateFlush=true`), файл `logs/llm-requests.log`, `SizeAndTimeBasedRollingPolicy`: `logs/llm-requests.%d{yyyy-MM-dd}.%i.log.gz`, `maxFileSize=10MB`, `maxHistory=30`, `totalSizeCap=1GB`;
 - encoder: `%msg%n` (сообщение — уже готовый JSON, без лишнего паттерна);
-- опционально `AsyncAppender` (queueSize=1024, discardingThreshold=0), чтобы запись лога не блокировала ответ.
+- `AsyncAppender` НЕ используется: запись синхронная с `immediateFlush=true` — журнал обязан переживать падение процесса, асинхронность тут не нужна.
 
 ## 10. Конкурентность при записи файлов
 

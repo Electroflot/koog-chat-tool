@@ -43,7 +43,8 @@ fun Route.chatToolsRoutes(
         val request = try {
             json.decodeFromString<SaveChatRequest>(bodyBytes.decodeToString())
         } catch (e: SerializationException) {
-            throw InvalidJsonException("Тело запроса не соответствует схеме: ${e.message}")
+            // safeDetail(): причина без эха тела запроса (QA T10, дефект 3).
+            throw InvalidJsonException("Тело запроса не соответствует схеме: ${e.safeDetail()}")
         }
 
         // Бизнес-валидация (роли, лимиты, id) — 400 VALIDATION_FAILED.
@@ -103,6 +104,18 @@ suspend fun ApplicationCall.readBodyWithLimit(maxBytes: Long): ByteArray {
 }
 
 private const val BUFFER_SIZE = 8192
+
+/**
+ * Выжимка из сообщения kotlinx-serialization БЕЗ эха тела запроса:
+ * kotlinx дописывает к ошибкам суффикс "JSON input: {...}" с самим телом —
+ * возвращать клиенту его же тело не нужно (QA T10, дефект 3).
+ */
+fun SerializationException.safeDetail(): String =
+    (message ?: "неизвестная причина")
+        .substringBefore("JSON input:")
+        .trim()
+        .take(200)
+        .ifBlank { "неизвестная причина" }
 
 /** Ответ GET /health: состояние сервиса. */
 @Serializable
