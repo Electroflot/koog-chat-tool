@@ -140,7 +140,7 @@
       "agent": "qa",
       "depends_on": ["T8", "T9"],
       "deliverables": ["отчёт QA"],
-      "status": "in_progress"
+      "status": "done"
     },
     {
       "id": "T11",
