@@ -119,7 +119,7 @@
       "agent": "code-reviewer",
       "depends_on": ["T4", "T5", "T6", "T7"],
       "deliverables": ["отчёт ревью"],
-      "status": "in_progress"
+      "status": "done"
     },
     {
       "id": "T9",
@@ -128,8 +128,8 @@
       "description": "Устранить замечания код-ревью, если они есть. Пропускается, если замечаний нет.",
       "agent": "claude",
       "depends_on": ["T8"],
-      "deliverables": [],
-      "status": "pending",
+      "deliverables": ["исправления: .gitignore, коды LLM-ошибок, лимит тела, логирование, безопасность"],
+      "status": "done",
       "optional": true
     },
     {
@@ -140,7 +140,7 @@
       "agent": "qa",
       "depends_on": ["T8", "T9"],
       "deliverables": ["отчёт QA"],
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "id": "T11",
@@ -150,7 +150,7 @@
       "agent": "docs-writer",
       "depends_on": ["T9"],
       "deliverables": ["README.md"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "T12",
