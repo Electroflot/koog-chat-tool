@@ -29,13 +29,19 @@ import kotlinx.serialization.json.Json
  * логируется в logs/llm-requests.log. Полное описание: docs/ARCHITECTURE.md.
  */
 fun main() {
+    // Конфигурация читается сразу: каталог журнала нужно выставить ДО инициализации logback.
+    val config = AppConfig.fromHocon()
+
+    // logback читает системное свойство LLM_LOG_DIR при старте (см. logback.xml),
+    // поэтому свойство должно быть установлено до первого использования логгеров.
+    System.setProperty("LLM_LOG_DIR", config.logging.dir.toString())
+
     // Порт: env PORT, иначе значение по умолчанию 8080.
-    // (Остальная конфигурация читается в Application.module из application.conf.)
     val port = System.getenv("PORT")?.toIntOrNull() ?: 8080
 
     // Запускаем встроенный Netty-сервер; wait = true — блокируем поток main,
     // пока сервер работает.
-    embeddedServer(Netty, port = port, host = "0.0.0.0") { module() }
+    embeddedServer(Netty, port = port, host = "0.0.0.0") { module(config) }
         .start(wait = true)
 }
 
@@ -54,16 +60,16 @@ fun Application.module(
     config: AppConfig = AppConfig.fromHocon(),
     gatewayFactory: (AppConfig) -> ChatGateway = ::defaultGateway,
 ) {
-    // 1. Плагины Ktor: JSON-сериализация тел и единый формат ошибок.
-    install(ContentNegotiation) {
-        json(
-            Json {
-                ignoreUnknownKeys = true   // устойчивость к лишним полям в теле
-                encodeDefaults = true      // id/createdAt/updatedAt всегда в ответах
-                explicitNulls = false      // null-поля в JSON не печатаем
-            },
-        )
+    // 1. Общий кодек JSON: сериализация ответов И десериализация тел в маршрутах
+    //    (жёсткий лимит тела требует ручного чтения байтов, а не receive<T>()).
+    val json = Json {
+        ignoreUnknownKeys = true   // устойчивость к лишним полям в теле
+        encodeDefaults = true      // id/createdAt/updatedAt всегда в ответах
+        explicitNulls = false      // null-поля в JSON не печатаем
     }
+
+    // 2. Плагины Ktor: ContentNegotiation (этот же кодек) и единый формат ошибок.
+    install(ContentNegotiation) { json(json) }
     installErrorHandling()
 
     // 3. Хранилище историй: каталог (storage/chats) создаётся в конструкторе.
@@ -81,8 +87,14 @@ fun Application.module(
             storage = storage,
             llmConfig = config.llm,
             maxRequestBodyBytes = config.storage.maxRequestBodyBytes,
+            json = json,
         )
-        llmRoutes(gateway, config.llm)
+        llmRoutes(
+            gateway = gateway,
+            llmConfig = config.llm,
+            maxRequestBodyBytes = config.storage.maxRequestBodyBytes,
+            json = json,
+        )
     }
 }
 

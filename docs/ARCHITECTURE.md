@@ -147,11 +147,13 @@ data class ChatHistory(
 {
   "ok": true,
   "file": "dialog-42.json",
-  "path": "storage/chats/dialog-42.json",
+  "path": "dialog-42.json",
   "messageCount": 1,
   "savedAt": "2026-10-08T10:00:01Z"
 }
 ```
+
+(`path` — путь к файлу ОТНОСИТЕЛЬНО каталога хранилища; абсолютные пути сервера клиенту не раскрываются.)
 
 Семантика: идемпотентный upsert. Если файл для `id` существует — история объединяется: сообщения сливаются по `message.id` (совпадение id = входящее побеждает; сообщения без id просто дописываются), `updatedAt` обновляется, `createdAt` сохраняется. Если `id` не передан — генерируется новый файл с именем `chat-<yyyyMMdd-HHmmss>-<8 hex>.json`, и сервер возвращает фактический `id` в ответе (поле `id`).
 
@@ -162,12 +164,11 @@ data class ChatHistory(
 | 400 | INVALID_JSON | тело не парсится |
 | 400 | VALIDATION_FAILED | неверная роль, пустой контент, >500 сообщений, плохой id, title > 500 |
 | 413 | PAYLOAD_TOO_LARGE | тело > 5 МБ или сообщение > 100 000 символов |
-| 500 | STORAGE_ERROR | ошибка ввода-вывода/записи |
-| 503 | SERVICE_UNAVAILABLE | хранилище недоступно (например, нет прав на каталог) |
+| 500 | STORAGE_ERROR | ошибка ввода-вывода/записи (в т.ч. нет прав на каталог) |
 
 ### 5.2 GET /health
 
-`{"status": "ok", "storage": {"dir": "storage/chats", "writable": true}, "llm": {"configured": true, "provider": "openai-compatible", "model": "gpt-4.1"}}` — `llm.configured` = true, если задан apiKey. Модель и ключ НЕ раскрываются.
+`{"status": "ok", "storage": {"dir": "storage/chats", "writable": true}, "llm": {"configured": true, "provider": "openai-compatible", "model": "gpt-4.1"}}` — `llm.configured` = true, если задан apiKey. API-ключ и полный URL провайдера НЕ раскрываются (имя модели показывается).
 
 ### 5.3 POST /llm/chat (опционально, для верификации и QA)
 

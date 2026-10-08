@@ -1,8 +1,13 @@
 package com.koog.chattool.llm
 
 import com.koog.chattool.model.ChatException
+import com.koog.chattool.model.LlmErrorType
 import java.util.UUID
 import kotlin.time.Clock
+import kotlin.time.Instant
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
@@ -10,12 +15,12 @@ import org.slf4j.LoggerFactory
  * Декоратор шлюза LLM: ОБЯЗАТЕЛЬНОЕ логирование каждого вызова.
  *
  * Перед вызовом пишет событие llm.request, после успеха — llm.response,
- * при исключении — llm.error (все строковые поля проходят SecretMasker).
- * Записи идут в logs/llm-requests.log через выделенный логгер "llm.requests"
- * (файловый appender с ротацией настроен в logback.xml).
+ * при ЛЮБОЙ ошибке (включая отмену корутины) — llm.error. Все строковые поля
+ * проходят SecretMasker. Записи идут в logs/llm-requests.log через выделенный
+ * логгер "llm.requests" (файловый appender с ротацией настроен в logback.xml).
  *
  * requestId генерируется здесь и возвращается в ChatResult — он один
- * для всех трёх событий и виден клиенту в ответе /llm/chat.
+ * для всех событий вызова и виден клиенту в ответе /llm/chat.
  */
 class LlmLoggingGateway(
     /** Обёртываемый шлюз (KoogLlmGateway или фейк в тестах). */
@@ -31,7 +36,8 @@ class LlmLoggingGateway(
         val requestId = UUID.randomUUID().toString()
         val startedAt = Clock.System.now()
 
-        // Событие llm.request — фиксируем, ЧТО именно ушло к LLM (секреты маскируются).
+        // Событие llm.request — фиксируем, ЧТО именно ушло к LLM (секреты маскируются,
+        // из baseUrl вырезаются query и userinfo).
         log.info(
             LlmLog.encode(
                 LlmLog.Event(
@@ -39,7 +45,7 @@ class LlmLoggingGateway(
                     event = EVENT_REQUEST,
                     requestId = requestId,
                     provider = provider,
-                    baseUrl = baseUrl,
+                    baseUrl = sanitizeBaseUrl(baseUrl),
                     model = model,
                     systemPrompt = request.systemPrompt?.let(SecretMasker::mask),
                     messages = request.messages.map {
@@ -70,22 +76,53 @@ class LlmLoggingGateway(
             // requestId в результате заменяем своим: он должен совпадать с журналом.
             result.copy(requestId = requestId)
         } catch (e: ChatException) {
-            val durationMs = (Clock.System.now() - startedAt).inWholeMilliseconds
-
-            // Событие llm.error — тип ошибки и сообщение (секреты маскируются).
-            log.error(
-                LlmLog.encode(
-                    LlmLog.Event(
-                        ts = Clock.System.now().toString(),
-                        event = EVENT_ERROR,
-                        requestId = requestId,
-                        durationMs = durationMs,
-                        error = LlmLog.ErrorInfo(type = e.type.name, message = SecretMasker.mask(e.message)),
-                    ),
-                ),
-            )
+            logError(requestId, startedAt, e.type.name, e.message)
+            throw e
+        } catch (e: CancellationException) {
+            // Отмену НЕ проглатываем, но фиксируем в журнале — иначе событие
+            // llm.request останется без пары. Запись — в NonCancellable-контексте,
+            // чтобы отменённая корутина успела дописать журнал.
+            withContext(NonCancellable) {
+                logError(requestId, startedAt, "CANCELLED", e.message ?: "отмена вызова")
+            }
+            throw e
+        } catch (e: Exception) {
+            // Непредвиденная ошибка делегата: llm.error пишется для КАЖДОГО вызова.
+            logError(requestId, startedAt, LlmErrorType.LLM_ERROR.name, e.message ?: "неизвестная ошибка")
             throw e
         }
+    }
+
+    /** Пишет событие llm.error (тип, сообщение, длительность). */
+    private fun logError(requestId: String, startedAt: Instant, type: String, message: String) {
+        val durationMs = (Clock.System.now() - startedAt).inWholeMilliseconds
+        log.error(
+            LlmLog.encode(
+                LlmLog.Event(
+                    ts = Clock.System.now().toString(),
+                    event = EVENT_ERROR,
+                    requestId = requestId,
+                    durationMs = durationMs,
+                    error = LlmLog.ErrorInfo(type = type, message = SecretMasker.mask(message)),
+                ),
+            ),
+        )
+    }
+
+    /**
+     * Отрезает query и userinfo от URL провайдера: в журнал не должны попадать
+     * параметры запроса (туда иногда кладут ключи прокси: ?key=...) и учётные данные.
+     */
+    private fun sanitizeBaseUrl(url: String): String {
+        var cleaned = url.substringBefore('?').substringBefore('#')
+        val schemeSeparator = cleaned.indexOf("://")
+        if (schemeSeparator >= 0) {
+            val at = cleaned.indexOf('@', schemeSeparator + 3)
+            if (at >= 0) {
+                cleaned = cleaned.substring(0, schemeSeparator + 3) + cleaned.substring(at + 1)
+            }
+        }
+        return cleaned
     }
 
     companion object {

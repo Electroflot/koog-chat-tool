@@ -1,8 +1,10 @@
 package com.koog.chattool.routes
 
+import com.koog.chattool.llm.SecretMasker
 import com.koog.chattool.model.AppException
 import com.koog.chattool.model.ErrorBody
 import com.koog.chattool.model.ErrorResponse
+import kotlinx.coroutines.CancellationException
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
@@ -23,11 +25,18 @@ fun Application.installErrorHandling() {
 
     install(StatusPages) {
         // Ожидаемые ошибки приложения: валидация, хранилище, вызовы LLM.
+        // Сообщение маскируется: в нём может быть URL провайдера или текст с секретами.
         exception<AppException> { call, e ->
             if (e.httpStatus.value >= 500) {
-                log.warn("Ошибка ${e.code}: ${e.message}")
+                log.warn("Ошибка ${e.code}: ${SecretMasker.mask(e.message)}")
             }
-            call.respond(e.httpStatus, ErrorResponse(ErrorBody(e.code, e.message)))
+            call.respond(e.httpStatus, ErrorResponse(ErrorBody(e.code, SecretMasker.mask(e.message))))
+        }
+
+        // Отмену корутины НЕ превращаем в 500: пробрасываем как есть,
+        // чтобы не нарушать structured concurrency (Ktor корректно завершит запрос).
+        exception<CancellationException> { _, cause ->
+            throw cause
         }
 
         // Всё остальное — непредвиденные ошибки: логируем полностью, клиенту отдаём общее сообщение.

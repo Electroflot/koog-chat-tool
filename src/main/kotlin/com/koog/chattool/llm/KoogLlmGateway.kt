@@ -12,7 +12,6 @@ import java.io.IOException
 import java.net.SocketTimeoutException
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.TimeoutCancellationException
 
 /**
  * Реализация шлюза LLM на фреймворке Koog.
@@ -74,14 +73,22 @@ class KoogLlmGateway(
      * Классифицирует исключение провайдера в тип ошибки LLM:
      * таймауты → LLM_TIMEOUT, сетевые проблемы → LLM_UNAVAILABLE, остальное → LLM_ERROR.
      */
-    private fun mapKoogError(e: Throwable): ChatException = when (e) {
-        is TimeoutCancellationException, is SocketTimeoutException ->
+    private fun mapKoogError(e: Throwable): ChatException = when {
+        // Таймауты в Koog 1.3.0 реализованы через Ktor HttpTimeout, поэтому исключения
+        // приходят как HttpRequestTimeoutException / ConnectTimeoutException (все —
+        // наследники IOException). Проверка по имени класса ловит их все без жёсткой
+        // привязки к конкретным классам Ktor. Важно: ветка стоит ДО проверки IOException.
+        isTimeoutException(e) ->
             ChatException(LlmErrorType.LLM_TIMEOUT, "Таймаут вызова LLM: ${e.message}", e)
-        is IOException ->
+        e is IOException ->
             ChatException(LlmErrorType.LLM_UNAVAILABLE, "LLM-провайдер недоступен: ${e.message}", e)
         else ->
             ChatException(LlmErrorType.LLM_ERROR, "Ошибка вызова LLM: ${e.message}", e)
     }
+
+    /** Таймаут? JDK SocketTimeoutException или класс с "Timeout" в имени. */
+    private fun isTimeoutException(e: Throwable): Boolean =
+        e is SocketTimeoutException || e.javaClass.name.contains("Timeout", ignoreCase = true)
 }
 
 /**

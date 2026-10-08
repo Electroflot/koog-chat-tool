@@ -167,7 +167,8 @@ class LlmIntegrationTest {
         }
         assertEquals(HttpStatusCode.BadGateway, response.status)
         val error = Json.parseToJsonElement(response.bodyAsText()).jsonObject["error"]!!.jsonObject
-        assertEquals("LLM_ERROR", error["code"]!!.jsonPrimitive.content)
+        // Контракт: код ошибки = типу классификации (LLM_UNAVAILABLE → 502).
+        assertEquals("LLM_UNAVAILABLE", error["code"]!!.jsonPrimitive.content)
 
         val lines = LlmTestLogs.lines()
         assertEquals(2, lines.size, "при ошибке в журнале ровно два события: request и error")

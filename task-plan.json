@@ -109,7 +109,7 @@
       "agent": "test-writer",
       "depends_on": ["T4", "T5", "T6"],
       "deliverables": ["unit + integration тесты"],
-      "status": "in_progress"
+      "status": "done"
     },
     {
       "id": "T8",
@@ -119,7 +119,7 @@
       "agent": "code-reviewer",
       "depends_on": ["T4", "T5", "T6", "T7"],
       "deliverables": ["отчёт ревью"],
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "id": "T9",

@@ -93,7 +93,8 @@ class ChatToolsRoutesTest {
         assertEquals(true, body["ok"]!!.jsonPrimitive.boolean)
         assertEquals("dialog-42", body["id"]!!.jsonPrimitive.content)
         assertEquals("dialog-42.json", body["file"]!!.jsonPrimitive.content)
-        assertEquals(storageDir().resolve("dialog-42.json").toString(), body["path"]!!.jsonPrimitive.content)
+        // path — относительно каталога хранилища (не раскрываем абсолютные пути сервера).
+        assertEquals("dialog-42.json", body["path"]!!.jsonPrimitive.content)
         assertEquals(1, body["messageCount"]!!.jsonPrimitive.int)
 
         // Файл реально создан и содержит историю в JSON.

@@ -5,11 +5,14 @@ import com.koog.chattool.llm.ChatGateway
 import com.koog.chattool.llm.ChatRequest
 import com.koog.chattool.model.ChatMessage
 import com.koog.chattool.model.ChatRole
+import com.koog.chattool.model.InvalidJsonException
 import com.koog.chattool.model.ValidationException
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 
 /**
  * Верификационный эндпоинт POST /llm/chat — единственная точка, где сервис САМ
@@ -17,12 +20,23 @@ import kotlinx.serialization.Serializable
  * включается только для QA/верификации шлюза. Каждый вызов проходит через
  * LlmLoggingGateway и обязательно пишется в журнал logs/llm-requests.log.
  */
-fun Route.llmRoutes(gateway: ChatGateway, llmConfig: KoogConfig) {
+fun Route.llmRoutes(
+    gateway: ChatGateway,
+    llmConfig: KoogConfig,
+    maxRequestBodyBytes: Long,
+    json: Json,
+) {
     // Эндпоинт не регистрируется вообще, если не включён в конфигурации.
     if (!llmConfig.exposeChatEndpoint) return
 
     post("/llm/chat") {
-        val request = call.receiveValidated<LlmChatRequest>()
+        // Тот же жёсткий лимит тела, что и у /tools/save-chat (защита от OOM).
+        val bodyBytes = call.readBodyWithLimit(maxRequestBodyBytes)
+        val request = try {
+            json.decodeFromString<LlmChatRequest>(bodyBytes.decodeToString())
+        } catch (e: SerializationException) {
+            throw InvalidJsonException("Тело запроса не соответствует схеме: ${e.message}")
+        }
 
         // В запросе к LLM допустимы только роли system и user.
         val unsupported = request.messages.firstOrNull { it.role !in SUPPORTED_ROLES }

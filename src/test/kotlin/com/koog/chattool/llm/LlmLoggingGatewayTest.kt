@@ -161,4 +161,69 @@ class LlmLoggingGatewayTest {
         assertEquals(second.requestId, events[2].requestId)
         assertEquals(second.requestId, events[3].requestId)
     }
+
+    @Test
+    fun `baseUrl в журнале очищается от query и userinfo`() = runTest {
+        // Админ может зашить ключ прокси в query (?key=...) — в журнал он попадать не должен.
+        val gateway = LlmLoggingGateway(
+            delegate = FakeChatGateway(),
+            provider = "openai-compatible",
+            baseUrl = "https://user:pass@api.example.com/v1?key=supersecret&x=1#frag",
+            model = "gpt-4.1",
+            log = logger,
+        )
+        gateway.chat(requestWithSecret())
+
+        val rawLines = appender.list.map { it.formattedMessage }
+        val requestEvent = events().first { it.event == "llm.request" }
+        assertEquals("https://api.example.com/v1", requestEvent.baseUrl, "query и userinfo вырезаются")
+        assertFalse(rawLines.joinToString().contains("supersecret"), "query-параметры не должны попадать в журнал")
+        assertFalse(rawLines.joinToString().contains("user:pass"), "userinfo не должно попадать в журнал")
+    }
+
+    @Test
+    fun `непредвиденная ошибка делегата пишет llm error и пробрасывается`() = runTest {
+        val boom = IllegalStateException("внутренний сбой шлюза")
+        val delegate = object : ChatGateway {
+            override suspend fun chat(request: ChatRequest): ChatResult = throw boom
+        }
+
+        val e = assertFailsWith<IllegalStateException> { gateway(delegate).chat(requestWithSecret()) }
+        assertEquals(boom, e)
+
+        val events = events()
+        assertEquals(2, events.size, "даже непредвиденная ошибка даёт пару request+error")
+        assertEquals("llm.request", events[0].event)
+        assertEquals("llm.error", events[1].event)
+        assertEquals("LLM_ERROR", events[1].error?.type)
+        assertEquals(events[0].requestId, events[1].requestId, "requestId общий для пары событий")
+    }
+
+    @Test
+    fun `многострочный текст в журнале остаётся одной JSON-строкой`() = runTest {
+        // Контракт JSONL: одна запись = одна строка. Переносы строк в тексте
+        // должны экранироваться кодеком (\n внутри строкового значения).
+        val delegate = FakeChatGateway(
+            result = ChatResult(
+                requestId = "id",
+                text = "первая строка\nвторая строка",
+                finishReason = "stop",
+                inputTokens = 1,
+                outputTokens = 2,
+                totalTokens = 3,
+            ),
+        )
+        gateway(delegate).chat(
+            ChatRequest(
+                systemPrompt = "промпт\nс переносом",
+                messages = listOf(ChatMessage(ChatRole.USER, "текст\nс переносом")),
+            ),
+        )
+
+        val rawLines = appender.list.map { it.formattedMessage }
+        assertEquals(2, rawLines.size, "два события — ровно две строки журнала")
+        rawLines.forEach { line ->
+            assertEquals(1, line.lines().size, "каждое событие — одна строка, переносы экранированы: $line")
+        }
+    }
 }

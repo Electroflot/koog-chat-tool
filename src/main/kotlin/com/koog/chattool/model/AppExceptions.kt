@@ -40,11 +40,18 @@ class ChatException(
     val type: LlmErrorType,
     detail: String,
     cause: Throwable? = null,
-) : AppException("LLM_ERROR", detail, HttpStatusCode.BadGateway, cause)
+) : AppException(
+    // Код и HTTP-статус зависят от типа ошибки (контракт ARCHITECTURE.md п.5.1/п.8):
+    // таймаут → 504 Gateway Timeout, прочие ошибки LLM → 502 Bad Gateway.
+    code = type.name,
+    detail,
+    httpStatus = if (type == LlmErrorType.LLM_TIMEOUT) HttpStatusCode.GatewayTimeout else HttpStatusCode.BadGateway,
+    cause,
+)
 
 /** Классификация ошибок вызова LLM. */
 enum class LlmErrorType {
-    LLM_UNAVAILABLE,  // сеть/провайдер недоступен
-    LLM_TIMEOUT,      // превышен таймаут запроса
-    LLM_ERROR,        // прочие ошибки
+    LLM_UNAVAILABLE,  // сеть/провайдер недоступен → HTTP 502
+    LLM_TIMEOUT,      // превышен таймаут запроса → HTTP 504
+    LLM_ERROR,        // прочие ошибки → HTTP 502
 }

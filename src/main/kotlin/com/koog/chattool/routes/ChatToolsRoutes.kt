@@ -7,40 +7,45 @@ import com.koog.chattool.model.SaveChatRequest
 import com.koog.chattool.model.SaveChatResponse
 import com.koog.chattool.storage.ChatHistoryStorage
 import com.koog.chattool.validation.ChatValidator
-import io.ktor.http.HttpHeaders
-import io.ktor.serialization.JsonConvertException
 import io.ktor.server.application.ApplicationCall
-import io.ktor.server.plugins.BadRequestException
-import io.ktor.server.request.receive
+import io.ktor.server.request.receiveChannel
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
+import io.ktor.utils.io.readAvailable
+import java.io.ByteArrayOutputStream
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 
 /**
  * Маршруты инструмента для LLM (маршрутизация — Ktor):
  * - POST /tools/save-chat — сохранить историю диалога в JSON-файл;
  * - GET /health — состояние сервиса (хранилище, LLM-конфигурация).
  * Сама логика — в ChatHistoryStorage и ChatValidator; здесь только HTTP-обвязка.
+ *
+ * @param json кодек, общий с ContentNegotiation (см. Application.module).
  */
 fun Route.chatToolsRoutes(
     validator: ChatValidator,
     storage: ChatHistoryStorage,
     llmConfig: KoogConfig,
     maxRequestBodyBytes: Long,
+    json: Json,
 ) {
     post("/tools/save-chat") {
-        // Защита от слишком больших тел: если длина известна и выше лимита — 413.
-        // (Тела без Content-Length ограничены косвенно лимитами сообщений и их числа.)
-        val contentLength = call.request.headers[HttpHeaders.ContentLength]?.toLongOrNull()
-        if (contentLength != null && contentLength > maxRequestBodyBytes) {
-            throw PayloadTooLargeException("Тело запроса превышает лимит $maxRequestBodyBytes байт")
+        // ЖЁСТКИЙ лимит тела: читаем сырые байты с капом, не полагаясь на Content-Length —
+        // запросы с chunked-кодированием без заголовка обходили бы проверку (защита от OOM).
+        val bodyBytes = call.readBodyWithLimit(maxRequestBodyBytes)
+
+        // Десериализация; ошибки формата — единым кодом INVALID_JSON (400).
+        val request = try {
+            json.decodeFromString<SaveChatRequest>(bodyBytes.decodeToString())
+        } catch (e: SerializationException) {
+            throw InvalidJsonException("Тело запроса не соответствует схеме: ${e.message}")
         }
 
-        // Десериализация тела; ошибки формата приводятся к единому коду INVALID_JSON.
-        val request = call.receiveValidated<SaveChatRequest>()
         // Бизнес-валидация (роли, лимиты, id) — 400 VALIDATION_FAILED.
         validator.validate(request)
         // Сохранение: идемпотентный upsert с атомарной записью (см. ChatHistoryStorage).
@@ -74,22 +79,30 @@ fun Route.chatToolsRoutes(
 }
 
 /**
- * Приём тела запроса с приведением ошибок парсинга к единому формату API.
- * Ktor бросает BadRequestException / JsonConvertException / SerializationException —
- * мы превращаем их в InvalidJsonException, которую StatusPages отдаёт клиенту
- * как {"error": {"code": "INVALID_JSON", ...}} со статусом 400.
+ * Читает тело запроса потоково с жёстким байтовым лимитом: при превышении — 413
+ * (PayloadTooLargeException). Не опирается на Content-Length, поэтому защита
+ * работает и для chunked-тел без заголовка.
  */
-// Bound T : Any обязателен: в Ktor 3.3.3 receive<T>() объявлен с тем же ограничением.
-suspend inline fun <reified T : Any> ApplicationCall.receiveValidated(): T =
-    try {
-        receive<T>()
-    } catch (e: BadRequestException) {
-        throw InvalidJsonException("Тело запроса не является валидным JSON: ${e.message}")
-    } catch (e: JsonConvertException) {
-        throw InvalidJsonException("Тело запроса не является валидным JSON: ${e.message}")
-    } catch (e: SerializationException) {
-        throw InvalidJsonException("Тело запроса не соответствует схеме: ${e.message}")
+suspend fun ApplicationCall.readBodyWithLimit(maxBytes: Long): ByteArray {
+    val channel = receiveChannel()
+    val out = ByteArrayOutputStream()
+    val buffer = ByteArray(BUFFER_SIZE)
+    var total = 0L
+    while (true) {
+        // readAvailable возвращает до buffer.size байт или -1 в конце потока.
+        val read = channel.readAvailable(buffer)
+        if (read == -1) break
+        total += read
+        // Превышение фиксируем сразу, не дочитывая остаток тела.
+        if (total > maxBytes) {
+            throw PayloadTooLargeException("Тело запроса превышает лимит $maxBytes байт")
+        }
+        out.write(buffer, 0, read)
     }
+    return out.toByteArray()
+}
+
+private const val BUFFER_SIZE = 8192
 
 /** Ответ GET /health: состояние сервиса. */
 @Serializable

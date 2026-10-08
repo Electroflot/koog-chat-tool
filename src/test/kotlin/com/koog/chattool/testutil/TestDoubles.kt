@@ -31,13 +31,17 @@ import kotlinx.coroutines.flow.emptyFlow
  *   modelId, metadata) — именно в таком порядке объявлены параметры.
  */
 class FakePromptExecutor(
+    /** Если задано — execute() бросает это исключение (имитация сбоя провайдера). */
+    private val error: Throwable? = null,
     /** Функция-ответ фейка: получает промпт и модель, возвращает ответ ассистента. */
     private val response: suspend (Prompt, LLModel) -> Message.Assistant,
 ) : PromptExecutor() {
 
     /** Единственная точка, которую вызывает KoogLlmGateway при вызове LLM. */
-    override suspend fun execute(prompt: Prompt, model: LLModel, tools: List<ToolDescriptor>): Message.Assistant =
-        response(prompt, model)
+    override suspend fun execute(prompt: Prompt, model: LLModel, tools: List<ToolDescriptor>): Message.Assistant {
+        error?.let { throw it }
+        return response(prompt, model)
+    }
 
     /** Стриминг в тестах не используется — пустой поток. */
     override fun executeStreaming(prompt: Prompt, model: LLModel, tools: List<ToolDescriptor>): Flow<StreamFrame> =
