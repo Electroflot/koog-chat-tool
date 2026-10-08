@@ -35,19 +35,20 @@ fun main() {
 
     // Запускаем встроенный Netty-сервер; wait = true — блокируем поток main,
     // пока сервер работает.
-    embeddedServer(Netty, port = port, host = "0.0.0.0", module = Application::module)
+    embeddedServer(Netty, port = port, host = "0.0.0.0") { module() }
         .start(wait = true)
 }
 
 /**
  * Сборка приложения Ktor (структура — docs/ARCHITECTURE.md, раздел 3):
  * конфигурация → плагины → хранилище → шлюз LLM (Koog + логирование) → маршруты.
+ *
+ * @param config конфигурация приложения; по умолчанию читается из application.conf
+ *               (HOCON) + env-переменные. Тесты передают конфигурацию явно —
+ *               с каталогами @TempDir, чтобы не трогать реальные storage/ и logs/.
  */
-fun Application.module() {
-    // 1. Конфигурация: application.conf (HOCON) + переопределение env-переменными.
-    val config = AppConfig.fromHocon()
-
-    // 2. Плагины Ktor: JSON-сериализация тел и единый формат ошибок.
+fun Application.module(config: AppConfig = AppConfig.fromHocon()) {
+    // 1. Плагины Ktor: JSON-сериализация тел и единый формат ошибок.
     install(ContentNegotiation) {
         json(
             Json {

@@ -11,6 +11,11 @@
   Каталог logs/ фиксирован и добавлен в .gitignore — логи не попадают в репозиторий.
 -->
 <configuration>
+    <!-- Каталог журнала: системное свойство LLM_LOG_DIR (по умолчанию logs/).
+         Тесты задают его равным временному каталогу, чтобы журнал LLM-вызовов
+         писался не в рабочий logs/, а в песочницу теста. -->
+    <property name="LLM_LOG_DIR" value="${LLM_LOG_DIR:-logs}"/>
+
     <!-- Общий лог приложения в консоль. -->
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
@@ -20,11 +25,11 @@
 
     <!-- Журнал LLM-вызовов: JSONL-файл с ротацией (10MB на файл, 30 дней, до 1GB суммарно). -->
     <appender name="LLM-REQUESTS" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>logs/llm-requests.log</file>
+        <file>${LLM_LOG_DIR}/llm-requests.log</file>
         <!-- Немедленный сброс на диск: журнал должен переживать падение процесса. -->
         <immediateFlush>true</immediateFlush>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>logs/llm-requests.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <fileNamePattern>${LLM_LOG_DIR}/llm-requests.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
             <maxFileSize>10MB</maxFileSize>
             <maxHistory>30</maxHistory>
             <totalSizeCap>1GB</totalSizeCap>
